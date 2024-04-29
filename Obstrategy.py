@@ -52,14 +52,26 @@ def convert_dec_dms_to_deg(dec):
 
 class Obstrategy():
     def __init__(self,path):
+        #----deffine constant-------------------#
         self.ll, self.ul = 25, 87
-        gb_field_path = "./data//PRIME_LB_20230719_nunota.dat"
-        self.gb_field = np.genfromtxt(gb_field_path,names=["name","ra","dec","l","b","type"],dtype=[("num", int), ("ra", float), ("dec", float), ("l", float), ("b", float), ("type", int)])
-        self.list = np.genfromtxt(path,usecols=[0,1,2],names=["name","ra","dec"],encoding="utf-8",dtype=None)
+        self.sun_night, self.sun_twillight= 0, -15
+        self.obs_loc = EarthLocation(lat=-32.3763*u.deg, lon=20.8107*u.deg, height=1798*u.m) 
         self.now = datetime.now(aflica).replace(tzinfo=None)
         self.utc_now = self.now + timedelta(hours=-2)
         self.noon = self.now.replace(hour=12,minute=0,second=0,microsecond=0)
-        self.obs_loc = EarthLocation(lat=-32.3763*u.deg, lon=20.8107*u.deg, height=1798*u.m) 
+        self.pre = False #wether prepare for plot
+        #---------------------------------------#
+        #----load data--------------------------#
+        gb_field_path = "./data//PRIME_LB_20230719_nunota.dat"
+        self.gb_field = np.genfromtxt(gb_field_path,names=["name","ra","dec","l","b","type"],dtype=[("num", int), ("ra", float), ("dec", float), ("l", float), ("b", float), ("type", int)])
+        self.list = np.genfromtxt(path,usecols=[0,1,2],names=["name","ra","dec"],encoding="utf-8",dtype=None)
+        #---------------------------------------#
+        #----run function-----------------------#
+        self.calc_obs_start()
+        self.calc_obs_end()
+        #self.set_observable_time()
+        #self.set_observable_time_gb()
+        #---------------------------------------#
 
     def get_altaz(self,ra,dec,time): #引数はutc
         coords = SkyCoord(ra, dec, frame='icrs', unit='deg')
@@ -69,14 +81,13 @@ class Obstrategy():
         az = altaz_coords.az.degree
         return alt, az
     
-    def calc_night_start(self): #utcで返す
-        start_time = Time(self.noon, format='datetime', scale='utc')
-        ind_time = start_time
+    def calc_obs_start(self): #utcで返す
+        ind_time = Time(self.noon, format='datetime', scale='utc')
 
         while True:
             sun_altaz = get_sun(ind_time).transform_to(AltAz(obstime=ind_time,location=self.obs_loc)) 
             sun_alt = sun_altaz.alt.value
-            if sun_alt < -15:
+            if sun_alt < self.sun_twillight:
                 disappear_hour = ind_time
                 break
             ind_time +=  timedelta(hours=1)
@@ -84,7 +95,7 @@ class Obstrategy():
         while ind_time >= disappear_hour+timedelta(hours=-1):
             sun_altaz = get_sun(ind_time).transform_to(AltAz(obstime=ind_time,location=self.obs_loc)) 
             sun_alt = sun_altaz.alt.value
-            if not sun_alt < -15:
+            if not sun_alt < self.sun_twillight:
                 appear_10minuite = ind_time
                 break
             ind_time -= timedelta(minutes=10)
@@ -92,11 +103,36 @@ class Obstrategy():
         while ind_time <= appear_10minuite + timedelta(minutes=10):
             sun_altaz = get_sun(ind_time).transform_to(AltAz(obstime=ind_time,location=self.obs_loc)) 
             sun_alt = sun_altaz.alt.value
-            if sun_alt < -15:
-                return ind_time
+            if sun_alt < self.sun_twillight:
+                self.obs_start = ind_time.value
+            ind_time +=  timedelta(minutes=1)
+
+    def calc_obs_end(self): #utcで返す
+        ind_time = Time(self.obs_start+timedelta(hours=+3), format='datetime', scale='utc')
+
+        while True:
+            sun_altaz = get_sun(ind_time).transform_to(AltAz(obstime=ind_time,location=self.obs_loc)) 
+            sun_alt = sun_altaz.alt.value
+            if sun_alt > self.sun_twillight:
+                disappear_hour = ind_time
+                break
+            ind_time +=  timedelta(hours=1)
+
+        while ind_time >= disappear_hour+timedelta(hours=-1):
+            sun_altaz = get_sun(ind_time).transform_to(AltAz(obstime=ind_time,location=self.obs_loc)) 
+            sun_alt = sun_altaz.alt.value
+            if not sun_alt > self.sun_twillight:
+                appear_10minuite = ind_time
+                break
+            ind_time -= timedelta(minutes=10)
+        
+        while ind_time <= appear_10minuite + timedelta(minutes=10):
+            sun_altaz = get_sun(ind_time).transform_to(AltAz(obstime=ind_time,location=self.obs_loc)) 
+            sun_alt = sun_altaz.alt.value
+            if sun_alt > self.sun_twillight:
+                self.obs_end = ind_time.value
             ind_time +=  timedelta(minutes=1)
         
-
     def which_appear(self,ra,dec,time):
         alt, az = self.get_altaz(ra,dec,time)
         return alt > self.ll and alt < self.ul
@@ -130,11 +166,122 @@ class Obstrategy():
                 return ind_time
             ind_time +=  timedelta(minutes=1)
 
+    def calc_disappear(self,ra,dec,start_time,end_time): #utcで返す
+            ind_time = start_time
+            disappear = False
+    
+            if not self.which_appear(ra,dec,start_time):
+                return end_time
+            
+            #二分探索的なやつ
+            while ind_time < end_time: #あとで、このループの終わり方を考え直す
+                if not self.which_appear(ra,dec,ind_time):
+                    appear_hour = ind_time
+                    disappear = True
+                    break
+                ind_time +=  timedelta(hours=1)
+            
+            if not disappear:
+                return end_time
+    
+            while ind_time >= appear_hour+timedelta(hours=-1):
+                if self.which_appear(ra,dec,ind_time):
+                    appear_10minuite = ind_time
+                    break
+                ind_time -= timedelta(minutes=10)
+            
+            while ind_time <= appear_10minuite + timedelta(minutes=10):
+                if not self.which_appear(ra,dec,ind_time):
+                    return ind_time
+                ind_time +=  timedelta(minutes=1)
+
+    def set_observable_time(self):
+        start_time_list, end_time_list = [], []
+
+        for i in range(self.list.shape[0]):
+            ra, dec = self.list["ra"][i], self.list["dec"][i]
+            appear_time = self.calc_appear(ra,dec,self.obs_start,self.obs_end)
+            disappear_time = self.calc_disappear(ra,dec,self.obs_start,self.obs_end)
+            start_time_list.append(appear_time)
+            end_time_list.append(disappear_time)
+
+        new_data = np.zeros(self.list.shape[0], dtype=self.list.dtype.descr + [("start", "datetime64[s]"), ("end", "datetime64[s]")])
+        for name in self.list.dtype.names:
+            new_data[name] = self.list[name]
+        new_data["start"] = start_time_list
+        new_data["end"] = end_time_list
+
+        self.list = new_data
+
+    def set_observable_time_gb(self):
+        start_time_list, end_time_list = [], []
+
+        for i in range(self.gb_field.shape[0]):
+            ra, dec = self.gb_field["ra"][i], self.gb_field["dec"][i]
+            appear_time = self.calc_appear(ra,dec,self.obs_start,self.obs_end)
+            disappear_time = self.calc_disappear(ra,dec,self.obs_start,self.obs_end)
+            start_time_list.append(appear_time)
+            end_time_list.append(disappear_time)
+
+        new_data = np.zeros(self.gb_field.shape[0], dtype=self.gb_field.dtype.descr + [("start", "datetime64[s]"), ("end", "datetime64[s]")])
+        for name in self.gb_field.dtype.names:
+            new_data[name] = self.gb_field[name]
+        new_data["start"] = start_time_list
+        new_data["end"] = end_time_list
+
+        self.gb_field = new_data
+
+    def prepare_for_plot(self):
+        time_list = []
+        alt_array, az_array = [], []
+        alt_array_gb, az_array_gb = [], []
+        current_time = self.obs_start
+        while current_time <= self.obs_end:
+            time_list.append(current_time)
+            alt, az = self.get_altaz(self.list["ra"],self.list["dec"],current_time)
+            alt_gb, az_gb = self.get_altaz(self.gb_field["ra"],self.gb_field["dec"],current_time)
+            current_time += timedelta(minutes=30)
+            alt_array.append(alt)
+            az_array.append(az)
+            alt_array_gb.append(alt_gb)
+            az_array_gb.append(az_gb)
+
+        self.time_list = np.array(time_list) #utc時間
+        self.alt_array, self.az_array = np.array(alt_array).T, np.array(az_array).T
+        self.alt_array_gb, self.az_array_gb = np.array(alt_array_gb).T, np.array(az_array_gb).T
+        self.pre = True
+
+    def plot_alt(self):
+        if not self.pre:
+            self.prepare_for_plot()
+
+        plt.figure(figsize=(6,5))
+
+        for i in range(self.alt_array.shape[0]):
+            plt.plot(self.time_list+timedelta(hours=+2),self.alt_array[i],lw=2,c="blue",alpha=0.5) #南ア時間でプロット
+        for i in range(self.alt_array_gb.shape[0]):
+            plt.plot(self.time_list+timedelta(hours=+2),self.alt_array_gb[i],lw=2,c="red",alpha=0.5) #南ア時間でプロット
+
+        plt.hlines(y=22,xmin=self.time_list[0]+timedelta(hours=+2),xmax=self.time_list[-1]+timedelta(hours=+2),colors="cyan",linestyles="--",label="low limit= 22")
+        plt.gca().xaxis.set_major_locator(HourLocator())
+        plt.gca().xaxis.set_minor_locator(MinuteLocator(interval=60)) 
+        plt.gca().xaxis.set_major_formatter(DateFormatter('%H')) 
+        plt.ylabel("Altitude")
+        plt.xlabel(f"Time, starting at {self.time_list[0].strftime('%Y-%m-%d')}")
+        plt.ylim(0,90)
+        plt.grid(True, linestyle='--', color='gray')
+        plt.minorticks_on()
+        plt.legend(loc="best")
+        plt.show()
 
 tmp = Obstrategy("./data/test_list.dat")
 ra_array = np.array([10,20,30])
 dec_array = np.array([10,20,30])
 print(tmp.calc_appear(-50,-50,tmp.now,tmp.now+timedelta(hours=12)).replace(microsecond=0,second=0))
+print(tmp.calc_disappear(-50,-50,tmp.now+timedelta(hours=5),tmp.now+timedelta(hours=12)).replace(microsecond=0,second=0))
 print(tmp.utc_now)
 print(tmp.now)
-print(tmp.calc_night_start())
+print(tmp.obs_start,tmp.obs_end)
+#print(tmp.list)
+#print(tmp.gb_field)
+tmp.plot_alt()
