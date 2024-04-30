@@ -48,10 +48,21 @@ def convert_dec_dms_to_deg(dec):
         result *= -1
     return result
 
+def convert_altaz_xy(alt,az):
+    alt_rad, az_rad = np.deg2rad(alt), np.deg2rad(az)
+    x = np.abs(np.cos(alt_rad))*np.cos(az_rad+np.pi/2)
+    y = np.abs(np.cos(alt_rad))*np.sin(az_rad+np.pi/2)
+    return x, y, alt_rad>0
+
 #------------------------------------------------------------------------------------#
 
 class Obstrategy():
     def __init__(self,path):
+        #----load data--------------------------#
+        gb_field_path = "./data//PRIME_LB_20230719_nunota.dat"
+        self.gb_field = np.genfromtxt(gb_field_path,names=["name","ra","dec","l","b","type"],dtype=[("num", int), ("ra", float), ("dec", float), ("l", float), ("b", float), ("type", int)])
+        self.list = np.genfromtxt(path,usecols=[0,1,2],names=["name","ra","dec"],encoding="utf-8",dtype=None)
+        #---------------------------------------#
         #----deffine constant-------------------#
         self.ll, self.ul = 25, 87
         self.sun_night, self.sun_twillight= 0, -15
@@ -60,11 +71,12 @@ class Obstrategy():
         self.utc_now = self.now + timedelta(hours=-2)
         self.noon = self.now.replace(hour=12,minute=0,second=0,microsecond=0)
         self.pre = False #wether prepare for plot
-        #---------------------------------------#
-        #----load data--------------------------#
-        gb_field_path = "./data//PRIME_LB_20230719_nunota.dat"
-        self.gb_field = np.genfromtxt(gb_field_path,names=["name","ra","dec","l","b","type"],dtype=[("num", int), ("ra", float), ("dec", float), ("l", float), ("b", float), ("type", int)])
-        self.list = np.genfromtxt(path,usecols=[0,1,2],names=["name","ra","dec"],encoding="utf-8",dtype=None)
+        self.main = np.where(self.gb_field["type"]==1)
+        self.sub = np.where(self.gb_field["type"]==2)
+        self.moa = np.where(self.gb_field["type"]==3)
+        self.other = np.where(self.gb_field["type"]==0)
+        self.m_s = np.union1d(self.main, self.sub)
+        self.m_s_m = np.union1d(self.m_s, self.moa)
         #---------------------------------------#
         #----run function-----------------------#
         self.calc_obs_start()
@@ -262,7 +274,7 @@ class Obstrategy():
         for i in range(self.alt_array_gb.shape[0]):
             plt.plot(self.time_list+timedelta(hours=+2),self.alt_array_gb[i],lw=2,c="red",alpha=0.5) #南ア時間でプロット
 
-        plt.hlines(y=22,xmin=self.time_list[0]+timedelta(hours=+2),xmax=self.time_list[-1]+timedelta(hours=+2),colors="cyan",linestyles="--",label="low limit= 22")
+        plt.hlines(y=self.ll,xmin=self.time_list[0]+timedelta(hours=+2),xmax=self.time_list[-1]+timedelta(hours=+2),colors="cyan",linestyles="--",label="low limit= 22")
         plt.gca().xaxis.set_major_locator(HourLocator())
         plt.gca().xaxis.set_minor_locator(MinuteLocator(interval=60)) 
         plt.gca().xaxis.set_major_formatter(DateFormatter('%H')) 
@@ -272,6 +284,38 @@ class Obstrategy():
         plt.grid(True, linestyle='--', color='gray')
         plt.minorticks_on()
         plt.legend(loc="best")
+        plt.show()
+
+    def plot_altaz(self):
+        if not self.pre:
+            self.prepare_for_plot()
+        
+        plt.figure(figsize=(5,5))
+        x, y, _ = convert_altaz_xy(self.alt_array.T,self.az_array.T)
+        ind = np.where(_)[0]
+        plt.plot(x[ind],y[ind],lw=1,c="blue",alpha=0.5)
+        x, y, _ = convert_altaz_xy(self.alt_array_gb.T,self.az_array_gb.T)
+        ind = np.where(_)[0]
+        plt.plot(x[ind],y[ind],lw=1,c="red",alpha=0.5)
+
+        #--------------plot circle----------------#
+        theta = np.linspace(0, 2*np.pi, 100)
+        x = np.cos(theta)
+        y = np.sin(theta)
+        plt.plot(x, y,c="black")
+        x = np.cos(np.deg2rad(self.ul))*np.cos(theta)
+        y = np.cos(np.deg2rad(self.ul))*np.sin(theta)
+        plt.plot(x, y,c="C1")
+        x = np.cos(np.deg2rad(self.ll))*np.cos(theta)
+        y = np.cos(np.deg2rad(self.ll))*np.sin(theta)
+        plt.plot(x, y, c="C1")
+        #------------------------------------------#
+
+        plt.axis('equal')
+        plt.xticks([]) 
+        plt.yticks([])
+        plt.xlim(-1.1,1.1)
+        plt.ylim(-1.1,1.1)
         plt.show()
 
 tmp = Obstrategy("./data/test_list.dat")
@@ -284,4 +328,5 @@ print(tmp.now)
 print(tmp.obs_start,tmp.obs_end)
 #print(tmp.list)
 #print(tmp.gb_field)
+tmp.plot_altaz()
 tmp.plot_alt()
