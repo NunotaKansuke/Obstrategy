@@ -81,8 +81,8 @@ class Obstrategy():
         #----run function-----------------------#
         self.calc_obs_start()
         self.calc_obs_end()
-        #self.set_observable_time()
-        #self.set_observable_time_gb()
+        self.set_observable_time()
+        self.set_observable_time_gb()
         #---------------------------------------#
 
     def get_altaz(self,ra,dec,time): #引数はutc
@@ -150,62 +150,36 @@ class Obstrategy():
         return alt > self.ll and alt < self.ul
 
     def calc_appear(self,ra,dec,start_time,end_time): #utcで返す
-        ind_time = start_time
-        appear = False
-
         if self.which_appear(ra,dec,start_time):
             return start_time
-        
-        #二分探索的なやつ
-        while ind_time < end_time: #あとで、このループの終わり方を考え直す
-            if self.which_appear(ra,dec,ind_time):
-                appear_hour = ind_time
-                appear = True
-                break
-            ind_time +=  timedelta(hours=1)
-        
-        if not appear:
+        if not self.which_appear(ra,dec,end_time):
             return end_time
-
-        while ind_time >= appear_hour+timedelta(hours=-1):
-            if not self.which_appear(ra,dec,ind_time):
-                appear_10minuite = ind_time
-                break
-            ind_time -= timedelta(minutes=10)
         
-        while ind_time <= appear_10minuite + timedelta(minutes=10):
-            if self.which_appear(ra,dec,ind_time):
-                return ind_time
-            ind_time +=  timedelta(minutes=1)
-
-    def calc_disappear(self,ra,dec,start_time,end_time): #utcで返す
-            ind_time = start_time
-            disappear = False
+        #二分探索
+        time1, time2 = start_time, end_time
+        while abs(time1-time2)>timedelta(minutes=1):
+            time3 = time1 + (time2-time1)/2
+            if self.which_appear(ra,dec,time3):
+                time2 = time3
+            else:
+                time1 = time3
+        return time3
     
-            if not self.which_appear(ra,dec,start_time):
-                return end_time
-            
-            #二分探索的なやつ
-            while ind_time < end_time: #あとで、このループの終わり方を考え直す
-                if not self.which_appear(ra,dec,ind_time):
-                    appear_hour = ind_time
-                    disappear = True
-                    break
-                ind_time +=  timedelta(hours=1)
-            
-            if not disappear:
-                return end_time
-    
-            while ind_time >= appear_hour+timedelta(hours=-1):
-                if self.which_appear(ra,dec,ind_time):
-                    appear_10minuite = ind_time
-                    break
-                ind_time -= timedelta(minutes=10)
-            
-            while ind_time <= appear_10minuite + timedelta(minutes=10):
-                if not self.which_appear(ra,dec,ind_time):
-                    return ind_time
-                ind_time +=  timedelta(minutes=1)
+    def calc_disappear(self,ra,dec,start_time,end_time): #wutcで返す
+        if not self.which_appear(ra,dec,start_time):
+            return start_time
+        if self.which_appear(ra,dec,end_time):
+            return end_time
+        
+        #二分探索
+        time1, time2 = start_time, end_time
+        while abs(time1-time2)>timedelta(minutes=1):
+            time3 = time1 + (time2-time1)/2
+            if not self.which_appear(ra,dec,time3):
+                time2 = time3
+            else:
+                time1 = time3
+        return time3
 
     def set_observable_time(self):
         start_time_list, end_time_list = [], []
@@ -271,9 +245,11 @@ class Obstrategy():
 
         for i in range(self.alt_array.shape[0]):
             plt.plot(self.time_list+timedelta(hours=+2),self.alt_array[i],lw=2,c="blue",alpha=0.5) #南ア時間でプロット
-        for i in range(self.alt_array_gb.shape[0]):
+        for i in self.other[0]:
+           plt.plot(self.time_list+timedelta(hours=+2),self.alt_array_gb[i],lw=2,c="orange",alpha=0.5) #南ア時間でプロット
+        for i in self.m_s_m:
             plt.plot(self.time_list+timedelta(hours=+2),self.alt_array_gb[i],lw=2,c="red",alpha=0.5) #南ア時間でプロット
-
+        
         plt.hlines(y=self.ll,xmin=self.time_list[0]+timedelta(hours=+2),xmax=self.time_list[-1]+timedelta(hours=+2),colors="cyan",linestyles="--",label="low limit= 22")
         plt.gca().xaxis.set_major_locator(HourLocator())
         plt.gca().xaxis.set_minor_locator(MinuteLocator(interval=60)) 
@@ -292,11 +268,10 @@ class Obstrategy():
         
         plt.figure(figsize=(5,5))
         x, y, _ = convert_altaz_xy(self.alt_array.T,self.az_array.T)
-        ind = np.where(_)[0]
-        plt.plot(x[ind],y[ind],lw=1,c="blue",alpha=0.5)
+        plt.plot(x,y,lw=1,c="blue",alpha=0.5)
         x, y, _ = convert_altaz_xy(self.alt_array_gb.T,self.az_array_gb.T)
-        ind = np.where(_)[0]
-        plt.plot(x[ind],y[ind],lw=1,c="red",alpha=0.5)
+        plt.plot(x.T[self.other].T,y.T[self.other].T,lw=1,c="orange",alpha=0.5)
+        plt.plot(x.T[self.m_s_m].T,y.T[self.m_s_m].T,lw=1,c="red",alpha=0.5)
 
         #--------------plot circle----------------#
         theta = np.linspace(0, 2*np.pi, 100)
@@ -318,15 +293,19 @@ class Obstrategy():
         plt.ylim(-1.1,1.1)
         plt.show()
 
-tmp = Obstrategy("./data/test_list.dat")
-ra_array = np.array([10,20,30])
-dec_array = np.array([10,20,30])
-print(tmp.calc_appear(-50,-50,tmp.now,tmp.now+timedelta(hours=12)).replace(microsecond=0,second=0))
-print(tmp.calc_disappear(-50,-50,tmp.now+timedelta(hours=5),tmp.now+timedelta(hours=12)).replace(microsecond=0,second=0))
-print(tmp.utc_now)
-print(tmp.now)
-print(tmp.obs_start,tmp.obs_end)
-#print(tmp.list)
-#print(tmp.gb_field)
-tmp.plot_altaz()
-tmp.plot_alt()
+#----------------------------------------------------------#
+if __name__ == "__main__":
+    tmp = Obstrategy("./data/test_list.dat")
+    ra_array = np.array([10,20,30])
+    dec_array = np.array([10,20,30])
+    #print(tmp.calc_appear(-50,-50,tmp.now,tmp.now+timedelta(hours=12)).replace(microsecond=0,second=0))
+    #print(tmp.calc_disappear(-50,-50,tmp.now+timedelta(hours=5),tmp.now+timedelta(hours=12)).replace(microsecond=0,second=0))
+    #print(tmp.utc_now)
+    #print(tmp.now)
+    #print(tmp.obs_start,tmp.obs_end)
+    #print(tmp.list)
+    #print(tmp.gb_field[tmp.m_s_m])
+    #tmp.plot_altaz()
+    #tmp.plot_alt()
+    print(tmp.calc_disappear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
+    print(tmp.calc_appear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
