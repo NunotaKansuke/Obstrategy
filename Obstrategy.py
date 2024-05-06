@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import requests
+#import requests
 import numpy as np
 from astropy.time import Time
 from astropy.coordinates import EarthLocation
 import astropy.units as u
-from astroplan import Observer
-import time
+#from astroplan import Observer
+#import time
 from astropy.coordinates import AltAz, SkyCoord
-import re
-from astroplan.plots import plot_sky
+#import re
+#from astroplan.plots import plot_sky
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from matplotlib.dates import HourLocator, MinuteLocator, DateFormatter
@@ -18,6 +18,7 @@ import pytz
 aflica = pytz.timezone('Africa/Johannesburg')
 from astropy.coordinates import get_sun
 from GetTobedone import get_observable_grid
+import pandas as pd
 
 #------------------------------------------------------------------------------------#
 
@@ -60,7 +61,7 @@ def convert_altaz_xy(alt,az):
 class Obstrategy():
     def __init__(self,path):
         #----load data--------------------------#
-        gb_field_path = "./data//PRIME_LB_20230719_nunota.dat"
+        gb_field_path = "./data/PRIME_LB_20230719_nunota.dat"
         self.gb_field = np.genfromtxt(gb_field_path,names=["name","ra","dec","l","b","type","x","y"]
                                       ,dtype=[("num", int),("ra", float),("dec", float),("l", float),("b", float),("type", int),("x", int),("y", int)])
         self.list = np.genfromtxt(path,usecols=[0,1,2],names=["name","ra","dec"],encoding="utf-8",dtype=None)
@@ -331,12 +332,33 @@ class Obstrategy():
         self.gb_num_obs = num_obs
         self.gb_order = order
 
-    def make_script_gb(self):
-        print("test")
+    def make_script_gb(self,path):
+        self.set_gb()
+        gb_script = pd.read_csv("data/gb_script.csv")
+        output = pd.DataFrame(columns=gb_script.columns)
 
+        for i in self.gb_order:
+            row = gb_script.iloc[i-1] 
+            output = pd.concat([output, row.to_frame().T], ignore_index=True) 
+        output.to_csv(path,index=False)
 
-        
+    def make_script_grid(self,path):
+        order = self.set_grid()
+        grid_script = pd.read_csv("data/obsable_all_sky_grid-3.csv")
+        output = pd.DataFrame(columns=grid_script.columns)
+        for i in order["num"]:
+            row = grid_script.iloc[i-1]
+            output = pd.concat([output, row.to_frame().T], ignore_index=True)
 
+        output.to_csv(path,index=False)
+
+    def print_time(self):
+        print(f"Start time for observation {self.obs_start+timedelta(hours=+2)}")
+        print(f"Start time for bulge {self.gb_start+timedelta(hours=+2)}")
+        print(f"End time {self.obs_end+timedelta(hours=+2)}")
+            
+
+    
 #----------------------------------------------------------#
 if __name__ == "__main__":
     tmp = Obstrategy("./data/test_list.dat")
@@ -351,6 +373,5 @@ if __name__ == "__main__":
     #tmp.plot_alt()
     #print(tmp.calc_disappear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
     #print(tmp.calc_appear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
-    print(tmp.set_grid())
-    tmp.set_gb()
-    print(tmp.gb_order)
+    tmp.make_script_grid("tmp.csv")
+    tmp.make_script_gb("tmp_gb.csv")
