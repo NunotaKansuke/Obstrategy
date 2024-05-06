@@ -4,7 +4,7 @@
 
 ## インストール
 
-1. このリポジトリをクローンします。
+1. 以下のコマンドを実行
 
     ```bash
     git clone https://github.com/your_username/Obstrategy.git
@@ -12,18 +12,14 @@
     
 ## 使い方
 
-1. `Obstrategy`ディレクトリに移動します。
+1. `Obstrategy`ディレクトリに移動
 
     ```bash
     cd Obstrategy
     ```
 
-2. 以下のコマンドを実行して、観測戦略を作成します。
+2. 以下のコマンドを実行
 
     ```bash
     python make_strategy.py
     ```
-
-## 著作権とライセンス
-
-© 2024 Obstrategy Contributors.
