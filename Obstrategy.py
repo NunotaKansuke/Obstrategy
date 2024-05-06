@@ -17,6 +17,7 @@ from matplotlib.dates import HourLocator, MinuteLocator, DateFormatter
 import pytz
 aflica = pytz.timezone('Africa/Johannesburg')
 from astropy.coordinates import get_sun
+from GetTobedone import get_observable_grid
 
 #------------------------------------------------------------------------------------#
 
@@ -60,9 +61,9 @@ class Obstrategy():
     def __init__(self,path):
         #----load data--------------------------#
         gb_field_path = "./data//PRIME_LB_20230719_nunota.dat"
-        self.gb_field = np.genfromtxt(gb_field_path,names=["name","ra","dec","l","b","type"],dtype=[("num", int), ("ra", float), ("dec", float), ("l", float), ("b", float), ("type", int)])
+        self.gb_field = np.genfromtxt(gb_field_path,names=["name","ra","dec","l","b","type","x","y"]
+                                      ,dtype=[("num", int),("ra", float),("dec", float),("l", float),("b", float),("type", int),("x", int),("y", int)])
         self.list = np.genfromtxt(path,usecols=[0,1,2],names=["name","ra","dec"],encoding="utf-8",dtype=None)
-        #---------------------------------------#
         #----deffine constant-------------------#
         self.ll, self.ul = 25, 87
         self.sun_night, self.sun_twillight= 0, -15
@@ -71,17 +72,17 @@ class Obstrategy():
         self.utc_now = self.now + timedelta(hours=-2)
         self.noon = self.now.replace(hour=12,minute=0,second=0,microsecond=0)
         self.pre = False #wether prepare for plot
-        self.main = np.where(self.gb_field["type"]==1)
-        self.sub = np.where(self.gb_field["type"]==2)
-        self.moa = np.where(self.gb_field["type"]==3)
-        self.other = np.where(self.gb_field["type"]==0)
-        self.m_s = np.union1d(self.main, self.sub)
-        self.m_s_m = np.union1d(self.m_s, self.moa)
-        #---------------------------------------#
+        self.main = np.where(self.gb_field["type"]==1) #gbのメインフィールド
+        self.sub = np.where(self.gb_field["type"]==2) #gbのメインの両端のフィールド
+        self.moa = np.where(self.gb_field["type"]==3) #moaのフィールド
+        self.other = np.where(self.gb_field["type"]==0) #その他のフィールド
+        self.m_s = np.union1d(self.main, self.sub) #メインと両端
+        self.m_s_m = np.union1d(self.m_s, self.moa) #メインと両端とmoa
+        self.gb_mode = self.m_s_m #何を使いますかってモード。今はメインと両端とmoaにしてる。引数で変えれるようにする。
         #----run function-----------------------#
         self.calc_obs_start()
         self.calc_obs_end()
-        self.set_observable_time()
+        #self.set_observable_time()
         self.set_observable_time_gb()
         #---------------------------------------#
 
@@ -216,6 +217,8 @@ class Obstrategy():
         new_data["end"] = end_time_list
 
         self.gb_field = new_data
+        self.gb_start = np.min(self.gb_field["start"][self.gb_mode]).astype(datetime)
+        self.gb_end = np.max(self.gb_field["end"][self.gb_mode]).astype(datetime)
 
     def prepare_for_plot(self):
         time_list = []
@@ -293,11 +296,50 @@ class Obstrategy():
         plt.ylim(-1.1,1.1)
         plt.show()
 
+    def set_grid(self):
+        grids = get_observable_grid(self.obs_start) #self.obs_startの時点で上に上がっているgridだけを取得
+        unique_values, indices = np.unique(grids["dec"], return_inverse=True) #decが同じやつ同士でまとめる
+
+        grouped_indices = [np.where(indices == i)[0] for i in range(len(unique_values))if len(np.where(indices == i)[0]) >= 10] #decが同じグループの中身が10こ以上のものだけ採用
+        last_disappear =  np.array([self.calc_disappear(grids["ra"][grouped_indices[i][-1]],grids["dec"][grouped_indices[i][-1]],
+                                                        self.obs_start,self.gb_start) for i in range(len(grouped_indices))]) #そのグループで一番最後に観測されるgridが沈む時間を計算
+        sort_ind = np.argsort(last_disappear)[::-1] #その時間でソートする
+        obs_orders = [grouped_indices[i] for i in sort_ind]
+        obs_orders = np.array(np.concatenate([arr.flatten() for arr in obs_orders]))
+        return grids[obs_orders]
+    
+    def set_gb(self):
+        obs_gb = self.gb_field[self.gb_mode]
+        num_obs = np.zeros(obs_gb.shape)
+        num_obs[0] = 1
+        self.gb_dt = timedelta(minutes=4) #gbのひとつの観測にかかる時間(後から調節する)
+        obs_gb = obs_gb[np.argsort(obs_gb["start"])]
+        order = [obs_gb["name"][0]]
+        current = obs_gb[0] 
+        ind_time = self.gb_start+self.gb_dt
+        while ind_time < self.obs_end: #観測できるかつ距離が短いかつできるだけ左上その中でまだ観測していない
+            can_obs = np.where(ind_time>obs_gb["start"]) #まだ、gbが沈むのは考慮に入れていない
+            next_cand = np.where(num_obs == np.min(num_obs[can_obs]))[0] #観測できるfieldの中で最小の観測回数と同様の観測回数をもつfield
+            dist = np.abs(current["x"]-obs_gb["x"]) + np.abs(current["y"]-obs_gb["y"])
+            dist_min = np.min(dist[np.intersect1d(can_obs, next_cand)])
+            dist_ind = np.where(dist == dist_min)
+            comb_ind = np.intersect1d(dist_ind,np.intersect1d(can_obs, next_cand))
+            order.append(obs_gb["name"][comb_ind[0]])
+            num_obs[comb_ind[0]] +=1
+            ind_time += self.gb_dt
+            current = obs_gb[comb_ind[0]]
+        self.gb_num_obs = num_obs
+        self.gb_order = order
+
+    def make_script_gb(self):
+        print("test")
+
+
+        
+
 #----------------------------------------------------------#
 if __name__ == "__main__":
     tmp = Obstrategy("./data/test_list.dat")
-    ra_array = np.array([10,20,30])
-    dec_array = np.array([10,20,30])
     #print(tmp.calc_appear(-50,-50,tmp.now,tmp.now+timedelta(hours=12)).replace(microsecond=0,second=0))
     #print(tmp.calc_disappear(-50,-50,tmp.now+timedelta(hours=5),tmp.now+timedelta(hours=12)).replace(microsecond=0,second=0))
     #print(tmp.utc_now)
@@ -307,5 +349,8 @@ if __name__ == "__main__":
     #print(tmp.gb_field[tmp.m_s_m])
     #tmp.plot_altaz()
     #tmp.plot_alt()
-    print(tmp.calc_disappear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
-    print(tmp.calc_appear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
+    #print(tmp.calc_disappear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
+    #print(tmp.calc_appear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
+    print(tmp.set_grid())
+    tmp.set_gb()
+    print(tmp.gb_order)
