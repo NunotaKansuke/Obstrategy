@@ -10,12 +10,6 @@
     git clone https://github.com/your_username/Obstrategy.git
     ```
     
-3. `Obstrategy`ディレクトリに移動します。
-
-    ```bash
-    cd Obstrategy
-    ```
-
 ## 使い方
 
 1. `Obstrategy`ディレクトリに移動します。
