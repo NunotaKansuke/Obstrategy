@@ -7,7 +7,7 @@
 1. 以下のコマンドを実行
 
     ```bash
-    git clone https://github.com/your_username/Obstrategy.git
+    git clone https://github.com/NunotaKansuke/Obstrategy.git
     ```
     
 ## 使い方
