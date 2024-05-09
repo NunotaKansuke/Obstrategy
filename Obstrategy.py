@@ -79,7 +79,7 @@ class Obstrategy():
         self.other = np.where(self.gb_field["type"]==0) #その他のフィールド
         self.m_s = np.union1d(self.main, self.sub) #メインと両端
         self.m_s_m = np.union1d(self.m_s, self.moa) #メインと両端とmoa
-        self.gb_mode = self.m_s_m #何を使いますかってモード。今はメインと両端とmoaにしてる。引数で変えれるようにする。
+        self.gb_mode = self.m_s #何を使いますかってモード。今はメインと両端とmoaにしてる。引数で変えれるようにする。
         #----run function-----------------------#
         self.calc_obs_start()
         self.calc_obs_end()
@@ -328,8 +328,11 @@ class Obstrategy():
             order.append(obs_gb["name"][comb_ind[0]])
             num_obs[comb_ind[0]] +=1
             ind_time += self.gb_dt
-            current = obs_gb[comb_ind[0]]
-        self.gb_num_obs = num_obs
+            if np.all(num_obs > 0): 
+                current = obs_gb[0]
+                num_obs=np.zeros(obs_gb.shape)
+            else:
+                 current = obs_gb[comb_ind[0]]
         self.gb_order = order
 
     def make_script_gb(self,path):
