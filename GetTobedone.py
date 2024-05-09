@@ -10,8 +10,14 @@ import re
 import pytz
 aflica = pytz.timezone('Africa/Johannesburg')
 
-url = "http://primeenv.saao.ac.za/tobedone.dat"
-response = requests.get(url)
+url1 = "http://primeenv.saao.ac.za/tobedone.dat"
+url2 = "http://192.168.212.11/tobedone.dat"
+
+try:
+    response = requests.get(url1)
+except:
+    response = requests.get(url2) 
+
 data = response.text
 
 tmp =  data.split("\n")
