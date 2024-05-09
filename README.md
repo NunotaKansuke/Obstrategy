@@ -23,3 +23,9 @@
     ```bash
     python make_strategy.py
     ```
+
+3. Follow the on-screen instructions.
+
+## License
+
+This project is licensed under the MIT License.
