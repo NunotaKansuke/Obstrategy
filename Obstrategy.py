@@ -19,6 +19,7 @@ aflica = pytz.timezone('Africa/Johannesburg')
 from astropy.coordinates import get_sun
 from GetTobedone import get_observable_grid
 import pandas as pd
+import sys
 
 #------------------------------------------------------------------------------------#
 
@@ -304,7 +305,7 @@ class Obstrategy():
         grouped_indices = [np.where(indices == i)[0] for i in range(len(unique_values))if len(np.where(indices == i)[0]) >= 10] #decが同じグループの中身が10こ以上のものだけ採用
         last_disappear =  np.array([self.calc_disappear(grids["ra"][grouped_indices[i][-1]],grids["dec"][grouped_indices[i][-1]],
                                                         self.obs_start,self.gb_start) for i in range(len(grouped_indices))]) #そのグループで一番最後に観測されるgridが沈む時間を計算
-        sort_ind = np.argsort(last_disappear)[::-1] #その時間でソートする
+        sort_ind = np.argsort(last_disappear) #その時間でソートする
         obs_orders = [grouped_indices[i] for i in sort_ind]
         obs_orders = np.array(np.concatenate([arr.flatten() for arr in obs_orders]))
         return grids[obs_orders]
@@ -318,6 +319,8 @@ class Obstrategy():
         order = [obs_gb["name"][0]]
         current = obs_gb[0] 
         ind_time = self.gb_start+self.gb_dt
+        self.nanshume = [] #スクリプトの各行が何周目かを示す。あとで、1周目はHbandで2周目はJbandで撮るみたいな時に使う
+        nanshume = 1
         while ind_time < self.obs_end: #観測できるかつ距離が短いかつできるだけ左上その中でまだ観測していない
             can_obs = np.where(ind_time>obs_gb["start"]) #まだ、gbが沈むのは考慮に入れていない
             next_cand = np.where(num_obs == np.min(num_obs[can_obs]))[0] #観測できるfieldの中で最小の観測回数と同様の観測回数をもつfield
@@ -326,23 +329,39 @@ class Obstrategy():
             dist_ind = np.where(dist == dist_min)
             comb_ind = np.intersect1d(dist_ind,np.intersect1d(can_obs, next_cand))
             order.append(obs_gb["name"][comb_ind[0]])
+            self.nanshume.append(nanshume)
             num_obs[comb_ind[0]] +=1
             ind_time += self.gb_dt
             if np.all(num_obs > 0): 
                 current = obs_gb[0]
                 num_obs=np.zeros(obs_gb.shape)
+                nanshume += 1
             else:
                  current = obs_gb[comb_ind[0]]
         self.gb_order = order
+        self.nanshume = np.array(self.nanshume)
 
-    def make_script_gb(self,path):
+    def make_script_gb(self,path,band=[]):
         self.set_gb()
+
+        if len(band) > np.max(self.nanshume):
+            sys.stderr.write(f"len(band) must be smaller than {np.max(self.nanshume)+1}\n")
+            sys.exit(1)
+
+        while len(band) < np.max(self.nanshume):
+            band.append("H")
+
         gb_script = pd.read_csv("data/gb_script.csv")
         output = pd.DataFrame(columns=gb_script.columns)
 
         for i in self.gb_order:
             row = gb_script.iloc[i-1] 
-            output = pd.concat([output, row.to_frame().T], ignore_index=True) 
+            output = pd.concat([output, row.to_frame().T], ignore_index=True)
+
+        for i in range(np.max(self.nanshume)):
+            ind = np.where(self.nanshume==i+1)[0]
+            output["Filter2"].iloc[ind] = band[i]
+        
         output.to_csv(path,index=False)
 
     def make_script_grid(self,path):
@@ -376,5 +395,5 @@ if __name__ == "__main__":
     #tmp.plot_alt()
     #print(tmp.calc_disappear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
     #print(tmp.calc_appear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
-    tmp.make_script_grid("tmp.csv")
-    tmp.make_script_gb("tmp_gb.csv")
+    #tmp.make_script_grid("tmp.csv")
+    tmp.make_script_gb("tmp_gb.csv",["H","Y"])
