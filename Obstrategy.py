@@ -7,7 +7,7 @@ from astropy.time import Time
 from astropy.coordinates import EarthLocation
 import astropy.units as u
 #from astroplan import Observer
-#import time
+import time
 from astropy.coordinates import AltAz, SkyCoord
 #import re
 #from astroplan.plots import plot_sky
@@ -374,6 +374,7 @@ class Obstrategy():
 
         output.to_csv(path,index=False)
 
+
     def print_time(self):
         print(f"Start time for observation {self.obs_start+timedelta(hours=+2)}")
         print(f"Start time for bulge {self.gb_start+timedelta(hours=+2)}")
@@ -396,4 +397,5 @@ if __name__ == "__main__":
     #print(tmp.calc_disappear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
     #print(tmp.calc_appear(16.159 ,-68.668,tmp.obs_start,tmp.obs_end))
     #tmp.make_script_grid("tmp.csv")
-    tmp.make_script_gb("tmp_gb.csv",["H","Y"])
+    #tmp.make_script_gb("tmp_gb.csv",["H","Y"])
+    tmp.make_script_grid_from_now("tmp.csv")
