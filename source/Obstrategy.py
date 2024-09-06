@@ -17,7 +17,7 @@ from matplotlib.dates import HourLocator, MinuteLocator, DateFormatter
 import pytz
 aflica = pytz.timezone('Africa/Johannesburg')
 from astropy.coordinates import get_sun
-from GetTobedone import get_observable_grid
+from source.GetTobedone import get_observable_grid
 import pandas as pd
 import sys
 

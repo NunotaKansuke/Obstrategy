@@ -39,7 +39,7 @@ field_array["num"], field_array["ra"], field_array["dec"] = field_num_list, fiel
 field_array["ra"] *= 360/24
 obs_loc = EarthLocation(lat=-32.3763*u.deg, lon=20.8107*u.deg, height=1798*u.m)
 
-def get_observable_grid(time,alt_min=30,alt_max=87):
+def get_observable_grid(time,alt_min=30,alt_max=87):#時間はutc
     
     obs_time = Time(time, format='datetime', scale='utc')
     
