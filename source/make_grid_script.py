@@ -18,6 +18,7 @@ import pytz
 aflica = pytz.timezone('Africa/Johannesburg')
 from astropy.coordinates import get_sun
 from source.GetTobedone import get_observable_grid
+from source.GetTobedoneHL import get_observable_grid_HL
 import pandas as pd
 import sys
 
@@ -82,8 +83,10 @@ class MakeGridScript():
         num_list = []
         time_list = []
         alt_list = []
+        az_list = []
         renzoku = 0
         renzoku_2 = 0
+        renzoku_HL = 0
         while True:
             if renzoku == 0:
                 grids = get_observable_grid(current_time,alt_min=alt_min,alt_max=alt_max)[3:]
@@ -93,6 +96,18 @@ class MakeGridScript():
                 continue
             if renzoku>=len(grids) and renzoku_2 == 1: #その時間に何もとるものがない時
                 print(f"there is no observable object at {(current_time+timedelta(hours=2)).strftime('%H:%M')}")
+                print("select from high latitude region")
+                grids_HL = get_observable_grid_HL(current_time,alt_min=alt_min,alt_max=85) #銀河面では撮るものがなくなった時に、高銀緯領域のgridを代わりにとる。
+                grids_HL = [row for row in grids_HL if row['num'] not in num_list] #まだlistに追加されてないフィールドだけを取ってくる。
+                grids_HL = grids_HL[np.argsort(tmp["alt"])][::-1] #高度が高いものを優先的に取りたいので、その順番にsortする。
+                grids_HL = grids_HL[:int(len(grids_HL) * 0.1)] #高度の高い順で前から10%の要素だけ取ってくる。
+                dist_from_current = np.abs(grids_HL["az"]-az_list[-1]) #target間の移動時間で一番ネックなのはドームの回転で、望遠鏡の高度はそこまで気にしなくていい。だから、azだけで距離を測る。
+                grid = grids_HL[np.argmin(dist_from_current)]
+                alt, az = self.get_altaz(grid["ra"],grid["dec"],current_time)
+                num_list.append(grid["num"])
+                time_list.append(current_time+timedelta(hours=2))
+                alt_list.append(alt)
+                az_list.append(az)
                 current_time += timedelta(minutes=4.5)
                 renzoku = 0
                 continue
@@ -102,10 +117,13 @@ class MakeGridScript():
                 renzoku = 0
                 continue
             renzoku += 1
-            if not grid["num"] in num_list: 
+            if not grid["num"] in num_list:
                 num_list.append(grid["num"])
                 time_list.append(current_time+timedelta(hours=2))
                 alt_list.append(alt)
+                az_list.append(az)
+            else: #ここのelse処理は正しいのかnot sure
+                continue
             current_time += timedelta(minutes=4.5)
             if current_time > end_time:
                 break
