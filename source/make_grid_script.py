@@ -147,4 +147,4 @@ class MakeGridScript():
 if __name__ == "__main__":
     tmp = MakeGridScript(margins=10)
     today = datetime.now(aflica).replace(tzinfo=None).strftime('%Y_%m_%d')
-    tmp.make_script_grid(f"./all_sky_grid/all_sky_grid{today}.csv",alt_min=25,hour=5)
+    tmp.make_script_grid(f"./all_sky_grid/all_sky_grid{today}.csv",alt_min=40,hour=5)
