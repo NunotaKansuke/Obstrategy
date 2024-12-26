@@ -1,0 +1,4 @@
+﻿Observer(PI institute),GridType,FieldNumber,RA,DEC,Filter1,Filter2,DitherType,"DitherRadius("")",DitherPhase(°),DitherTotal,Images,IntegrationTime(s),TargetName,SpecificTime,Priority
+OU,bulge_grid,GB126,18:00:20,-27:50:30.5,Open,H,None,0,0,1,12,11.44,SN2024A,UTC_01:00_02:00_01/04/2024,10
+NASA,no_grid,,20:0:30.6,-10:20:30.6,Open,J,Circle,120,0,12,1,11.44,PRIME 2024-BLG-1,,2
+ABC,all_sky_gird,field21399,6:20:30,30:0:40.8,Open,Y,Circle,10,0,6,2,8.58,GRB2024B,,2
